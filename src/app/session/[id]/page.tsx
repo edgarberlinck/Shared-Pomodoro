@@ -16,6 +16,7 @@ import {
   Users,
   ArrowLeft,
 } from "lucide-react";
+import { io, Socket } from "socket.io-client";
 
 type Member = {
   id: string;
@@ -52,8 +53,8 @@ export default function SessionPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const tickIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const prevSessionRef = useRef<SessionData | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -75,52 +76,83 @@ export default function SessionPage() {
     }
   }, [sessionId, router]);
 
-  // Poll for updates every 2 seconds
+  // Request notification permission
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Show notification when timer phase changes
+  useEffect(() => {
+    if (!session || !prevSessionRef.current) {
+      prevSessionRef.current = session;
+      return;
+    }
+
+    const prev = prevSessionRef.current;
+    const current = session;
+
+    // Detect phase change (work -> break or break -> work)
+    if (prev.timeLeft > 0 && current.timeLeft === (current.isBreak ? current.breakDuration : current.workDuration)) {
+      if (current.isBreak && !prev.isBreak) {
+        showNotification("Break Time! 🎉", "Time to take a break and relax.");
+      } else if (!current.isBreak && prev.isBreak) {
+        showNotification("Back to Work! 💪", "Break is over. Let's focus!");
+      }
+    }
+
+    prevSessionRef.current = session;
+  }, [session]);
+
+  function showNotification(title: string, body: string) {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        icon: "/icon.png",
+        badge: "/icon.png",
+      });
+    }
+  }
+
+  // Initialize WebSocket connection
   useEffect(() => {
     fetchSession();
-    pollIntervalRef.current = setInterval(fetchSession, 2000);
+
+    const socket = io({
+      path: "/socket.io",
+    });
+
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("WebSocket connected");
+      socket.emit("join-session", sessionId);
+    });
+
+    socket.on("timer-update", (updatedSession: SessionData) => {
+      console.log("Timer update received:", updatedSession);
+      setSession(updatedSession);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("WebSocket disconnected");
+    });
+
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      socket.emit("leave-session", sessionId);
+      socket.disconnect();
     };
-  }, [fetchSession]);
-
-  // Local tick for smooth countdown (reconciled with server every 2s)
-  useEffect(() => {
-    if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-
-    if (session?.status === "RUNNING" || session?.status === "BREAK") {
-      tickIntervalRef.current = setInterval(() => {
-        setSession((prev) => {
-          if (!prev) return prev;
-          if (prev.status !== "RUNNING" && prev.status !== "BREAK") return prev;
-          if (prev.timeLeft <= 0) return prev; // let server handle phase switch
-          return { ...prev, timeLeft: prev.timeLeft - 1 };
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
-    };
-  }, [session?.status]);
+  }, [sessionId, fetchSession]);
 
   async function sendAction(action: string) {
+    if (!socketRef.current) return;
+    
     setActionLoading(true);
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/timer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setSession(updated);
-      }
-    } catch {
-      // silent
-    } finally {
-      setActionLoading(false);
-    }
+    socketRef.current.emit("timer-action", { sessionId, action });
+    
+    // Wait a bit for the response
+    setTimeout(() => setActionLoading(false), 500);
   }
 
   function copyInviteLink() {
