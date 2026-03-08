@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Timer, Plus, Users, LogOut } from "lucide-react";
+import { Timer, Plus, Users, LogOut, BarChart3 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { signOut } from "@/lib/auth";
 import { SessionStatus } from "@/generated/prisma/enums";
@@ -78,6 +78,12 @@ export default async function DashboardPage() {
             <span className="font-bold">Shared Pomodoro</span>
           </Link>
           <div className="flex items-center gap-4">
+            <Link href="/reports">
+              <Button variant="outline" size="sm">
+                <BarChart3 className="h-4 w-4 mr-1" />
+                Reports
+              </Button>
+            </Link>
             <span className="text-sm text-muted-foreground">
               {session.user.name ?? session.user.email}
             </span>

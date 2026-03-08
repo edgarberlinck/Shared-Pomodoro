@@ -32,6 +32,7 @@ type SessionData = {
   breakDuration: number;
   timeLeft: number;
   isBreak: boolean;
+  completedPomodoros: number;
   ownerId: string;
   owner: { id: string; name: string | null; email: string };
   members: Member[];

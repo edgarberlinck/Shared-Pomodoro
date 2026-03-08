@@ -45,6 +45,7 @@ async function tickSession(sessionId: string, io: Server) {
         status: switchToBreak ? SessionStatus.BREAK : SessionStatus.RUNNING,
         timeLeft: switchToBreak ? session.breakDuration : session.workDuration,
         startedAt: new Date(),
+        completedPomodoros: switchToBreak ? session.completedPomodoros + 1 : session.completedPomodoros,
       },
       include: {
         owner: { select: { id: true, name: true, email: true } },
