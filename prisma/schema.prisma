@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String          @unique
+  password      String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  ownedSessions PomodoroSession[] @relation("SessionOwner")
+  memberships   SessionMember[]
+}
+
+model PomodoroSession {
+  id              String          @id @default(cuid())
+  name            String
+  inviteToken     String          @unique @default(cuid())
+  status          SessionStatus   @default(IDLE)
+  workDuration    Int             @default(1500) // seconds (25 min)
+  breakDuration   Int             @default(300)  // seconds (5 min)
+  timeLeft        Int             @default(1500)
+  isBreak         Boolean         @default(false)
+  startedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  ownerId         String
+  owner           User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members         SessionMember[]
+}
+
+model SessionMember {
+  id        String          @id @default(cuid())
+  userId    String
+  sessionId String
+  joinedAt  DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session   PomodoroSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sessionId])
+}
+
+enum SessionStatus {
+  IDLE
+  RUNNING
+  PAUSED
+  BREAK
+}
