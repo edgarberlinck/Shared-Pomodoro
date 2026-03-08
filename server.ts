@@ -18,6 +18,13 @@ const handle = app.getRequestHandler();
 // Active timers per session
 const activeTimers = new Map<string, NodeJS.Timeout>();
 
+// Track online users per session: sessionId -> Set<userId>
+const onlineUsers = new Map<string, Set<string>>();
+
+function getOnlineUsersForSession(sessionId: string): string[] {
+  return Array.from(onlineUsers.get(sessionId) || []);
+}
+
 async function tickSession(sessionId: string, io: Server) {
   const session = await prisma.pomodoroSession.findUnique({
     where: { id: sessionId },
@@ -54,7 +61,11 @@ async function tickSession(sessionId: string, io: Server) {
         },
       },
     });
-    io.to(`session:${sessionId}`).emit("timer-update", updated);
+    const updatedWithOnline = {
+      ...updated,
+      onlineUsers: getOnlineUsersForSession(sessionId),
+    };
+    io.to(`session:${sessionId}`).emit("timer-update", updatedWithOnline);
   } else {
     const updated = await prisma.pomodoroSession.update({
       where: { id: sessionId },
@@ -66,7 +77,11 @@ async function tickSession(sessionId: string, io: Server) {
         },
       },
     });
-    io.to(`session:${sessionId}`).emit("timer-update", updated);
+    const updatedWithOnline = {
+      ...updated,
+      onlineUsers: getOnlineUsersForSession(sessionId),
+    };
+    io.to(`session:${sessionId}`).emit("timer-update", updatedWithOnline);
   }
 }
 
@@ -107,10 +122,22 @@ app.prepare().then(() => {
 
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
+    
+    let currentUserId: string | null = null;
+    let currentSessionId: string | null = null;
 
-    socket.on("join-session", async (sessionId: string) => {
-      console.log(`Client ${socket.id} joining session ${sessionId}`);
+    socket.on("join-session", async ({ sessionId, userId }: { sessionId: string; userId: string }) => {
+      console.log(`Client ${socket.id} (user: ${userId}) joining session ${sessionId}`);
       socket.join(`session:${sessionId}`);
+      
+      currentUserId = userId;
+      currentSessionId = sessionId;
+      
+      // Add user to online users
+      if (!onlineUsers.has(sessionId)) {
+        onlineUsers.set(sessionId, new Set());
+      }
+      onlineUsers.get(sessionId)!.add(userId);
       
       // Send current session state
       const session = await prisma.pomodoroSession.findUnique({
@@ -124,13 +151,35 @@ app.prepare().then(() => {
       });
       
       if (session) {
-        socket.emit("timer-update", session);
+        const sessionWithOnline = {
+          ...session,
+          onlineUsers: getOnlineUsersForSession(sessionId),
+        };
+        socket.emit("timer-update", sessionWithOnline);
+        
+        // Notify others about online users update
+        socket.to(`session:${sessionId}`).emit("online-users-update", {
+          onlineUsers: getOnlineUsersForSession(sessionId),
+        });
       }
     });
 
     socket.on("leave-session", (sessionId: string) => {
       console.log(`Client ${socket.id} leaving session ${sessionId}`);
       socket.leave(`session:${sessionId}`);
+      
+      // Remove user from online users
+      if (currentUserId && onlineUsers.has(sessionId)) {
+        onlineUsers.get(sessionId)!.delete(currentUserId);
+        if (onlineUsers.get(sessionId)!.size === 0) {
+          onlineUsers.delete(sessionId);
+        } else {
+          // Notify others about online users update
+          io.to(`session:${sessionId}`).emit("online-users-update", {
+            onlineUsers: getOnlineUsersForSession(sessionId),
+          });
+        }
+      }
     });
 
     socket.on("timer-action", async ({ sessionId, action }) => {
@@ -186,12 +235,30 @@ app.prepare().then(() => {
           },
         });
         
-        io.to(`session:${sessionId}`).emit("timer-update", updated);
+        const updatedWithOnline = {
+          ...updated,
+          onlineUsers: getOnlineUsersForSession(sessionId),
+        };
+        
+        io.to(`session:${sessionId}`).emit("timer-update", updatedWithOnline);
       }
     });
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
+      
+      // Remove user from online users on disconnect
+      if (currentUserId && currentSessionId && onlineUsers.has(currentSessionId)) {
+        onlineUsers.get(currentSessionId)!.delete(currentUserId);
+        if (onlineUsers.get(currentSessionId)!.size === 0) {
+          onlineUsers.delete(currentSessionId);
+        } else {
+          // Notify others about online users update
+          io.to(`session:${currentSessionId}`).emit("online-users-update", {
+            onlineUsers: getOnlineUsersForSession(currentSessionId),
+          });
+        }
+      }
     });
   });
 

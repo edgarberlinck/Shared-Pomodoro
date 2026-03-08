@@ -36,6 +36,7 @@ type SessionData = {
   ownerId: string;
   owner: { id: string; name: string | null; email: string };
   members: Member[];
+  onlineUsers?: string[];
 };
 
 function formatTime(seconds: number): string {
@@ -54,6 +55,7 @@ export default function SessionPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const prevSessionRef = useRef<SessionData | null>(null);
 
@@ -70,6 +72,13 @@ export default function SessionPage() {
       }
       const data = await res.json();
       setSession(data);
+      
+      // Get current user from auth API
+      const authRes = await fetch("/api/auth/session");
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        setUserId(authData?.user?.id || null);
+      }
     } catch {
       setError("Failed to load session");
     } finally {
@@ -118,6 +127,8 @@ export default function SessionPage() {
 
   // Initialize WebSocket connection
   useEffect(() => {
+    if (!userId) return;
+    
     fetchSession();
 
     const socket = io({
@@ -128,12 +139,17 @@ export default function SessionPage() {
 
     socket.on("connect", () => {
       console.log("WebSocket connected");
-      socket.emit("join-session", sessionId);
+      socket.emit("join-session", { sessionId, userId });
     });
 
     socket.on("timer-update", (updatedSession: SessionData) => {
       console.log("Timer update received:", updatedSession);
       setSession(updatedSession);
+    });
+
+    socket.on("online-users-update", ({ onlineUsers }: { onlineUsers: string[] }) => {
+      console.log("Online users update:", onlineUsers);
+      setSession((prev) => prev ? { ...prev, onlineUsers } : null);
     });
 
     socket.on("disconnect", () => {
@@ -144,7 +160,7 @@ export default function SessionPage() {
       socket.emit("leave-session", sessionId);
       socket.disconnect();
     };
-  }, [sessionId, fetchSession]);
+  }, [sessionId, userId, fetchSession]);
 
   async function sendAction(action: string) {
     if (!socketRef.current) return;
@@ -341,19 +357,30 @@ export default function SessionPage() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
-                {allMembers.map(({ user, isOwner }) => (
-                  <li
-                    key={user.id}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span>{user.name ?? user.email}</span>
-                    {isOwner && (
-                      <Badge variant="outline" className="text-xs">
-                        Owner
-                      </Badge>
-                    )}
-                  </li>
-                ))}
+                {allMembers.map(({ user, isOwner }) => {
+                  const isOnline = session.onlineUsers?.includes(user.id);
+                  return (
+                    <li
+                      key={user.id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            isOnline ? "bg-green-500" : "bg-gray-400"
+                          }`}
+                          title={isOnline ? "Online" : "Offline"}
+                        />
+                        <span>{user.name ?? user.email}</span>
+                      </div>
+                      {isOwner && (
+                        <Badge variant="outline" className="text-xs">
+                          Owner
+                        </Badge>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </CardContent>
           </Card>
