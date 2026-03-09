@@ -61,6 +61,13 @@ export default function SessionPage() {
 
   const fetchSession = useCallback(async () => {
     try {
+      // Get current user from auth API first
+      const authRes = await fetch("/api/auth/session");
+      if (authRes.ok) {
+        const authData = await authRes.json();
+        setUserId(authData?.user?.id || null);
+      }
+
       const res = await fetch(`/api/sessions/${sessionId}`);
       if (res.status === 401) {
         router.push("/auth/signin");
@@ -72,13 +79,6 @@ export default function SessionPage() {
       }
       const data = await res.json();
       setSession(data);
-      
-      // Get current user from auth API
-      const authRes = await fetch("/api/auth/session");
-      if (authRes.ok) {
-        const authData = await authRes.json();
-        setUserId(authData?.user?.id || null);
-      }
     } catch {
       setError("Failed to load session");
     } finally {
@@ -125,11 +125,13 @@ export default function SessionPage() {
     }
   }
 
-  // Initialize WebSocket connection
+  // Initialize session and WebSocket connection
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
+
   useEffect(() => {
     if (!userId) return;
-    
-    fetchSession();
 
     const socket = io({
       path: "/socket.io",
@@ -160,7 +162,7 @@ export default function SessionPage() {
       socket.emit("leave-session", sessionId);
       socket.disconnect();
     };
-  }, [sessionId, userId, fetchSession]);
+  }, [sessionId, userId]);
 
   async function sendAction(action: string) {
     if (!socketRef.current) return;
