@@ -59,6 +59,15 @@ export default function SessionPage() {
   const prevSessionRef = useRef<SessionData | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize audio
+  useEffect(() => {
+    // Create audio element for notification sound
+    audioRef.current = new Audio();
+    // Using a simple beep sound (data URI for a short beep)
+    audioRef.current.src = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSiK0/LTgjMGHm7A7+OZRQ0PVqzn77BdGAg+ltrzxnMiBSuFzvLaizsIGGS57OihUBELTKXh8bllHAU2jdXyzn4vBSF+zPDajzsKElyx6OyrWBUIQ5zd8sFuIAMrgtDx1IU2Bhxqvu7mnEsODlOq5O+zYBoGO5PY88p1JAQogM/w2Ys6CRZhtuvpoFITC0mi4PK8aR4EL4fS8dmNPwgVX7bs7KVVEwlCm93yv28gAy2D0fHWiTcIGme97OecSw4NUqjk77ReFwY7k9jzy3YjBCh+zvDakzsJFmC16+mjUhILS6Hh8r1sHwQthtLx2I0+BxVetuzspVUUCUGb3fK/cCEDLYPR8daKOAcZZ73s56BODQ5Rp+TvtWAbBjuS1/PMeCUDKH7N8NqTOwoVYLbr6qNSEwtJoODywm8gBC2F0fHXjj4HFV627OylVRQJQJrd8sBxIQMtg9Hx1oo4BxlmvOznn04ODlCn5O+2YRsGOpLX88t5JgMnfszw2pM7ChVfterqpFMSC0ig4PLEcCEELIPR8deOPwcUXbXs7KZWFAk/mdzywnIiAy2D0fHWizcHGWW77OafTg4OT6bk77dmHAY6kdfzy3snAyd9y/DajDsKFV627OumVRQLSJ/g8sVxIgQrgtHx1408BxRctOzsplYUCT6Y2/LDcyIDLoTR8daMOAcZZLrs6J9ODg5QpuTwuGccBjmQ1vLMeygEKHzK8NuNOwkUXLXr66dWFApHnuDyxnMkAyuB0PHXjTwHE1u07OymVxQJPZjb88R0JQMuhNDx1407BxljuOvpn1AODk+l5PC5aB4GOY/V8sx8KQQnd8nw241ACRJasuvqqFgUCkae3/LHdSUDKoDQ8diOPQcTWrPr7KdYFAk8l9ryw3YmBC2Dz/HVjz0IE1iz6+qoWRQKRZ3e8sZ1JgMqf9Dw2I49BxJZsuvsp1kUCTyW2vLEeScELYLO8dWQPwgSV7Hq66lZFQpEnN7yxnUmAyp+z/DYjj4HElmx6+yoWRUKPJXa8sN5KAQsgs7x1JBACBJWsOrqqlkVCkOc3fLFdiYDKn3P8NiOPwcSWLDr7KlZFQo8ldryw3knBCuBzvHUkUEIEVWv6uqrWhUKQpvd8sR2JwMpfM/v2I9ACBFXr+rqq1oVCkKa3fPEdygEK4HN8dSRQggRVa/p6qxbFQpCmt3yxHYoBSl7z+/Xj0EJEFau6eurWxYLQprc88R3KAQrfczw1ZFCCRFUrujrrFwWC0GZ3PLDdykFKXvO79aQQgkRVa7o66xcFgtBmNzyxXgpBCp7zO/VkUMJEVOu6OusXBYLQZjc8cV4KQQqeszv1ZFDCRFTrujrrFwWC0CX3fLEeCoFKXrM79WRQwkRU67n66xdFgtAl9zxxHkqBSl6zO/UkUQJEVKt6OyvXhULQZfc8cN5KgUpeszv1JFECRBR";
+  }, []);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -111,7 +120,7 @@ export default function SessionPage() {
     }
   }, []);
 
-  // Show notification when timer phase changes
+  // Show notification and play sound when timer phase changes
   useEffect(() => {
     if (!session || !prevSessionRef.current) {
       prevSessionRef.current = session;
@@ -121,11 +130,15 @@ export default function SessionPage() {
     const prev = prevSessionRef.current;
     const current = session;
 
-    // Detect phase change (work -> break or break -> work)
-    if (prev.timeLeft > 0 && current.timeLeft === (current.isBreak ? current.breakDuration : current.workDuration)) {
+    // Detect phase change by checking if isBreak changed
+    if (prev.isBreak !== current.isBreak) {
       if (current.isBreak && !prev.isBreak) {
+        // Work -> Break
+        playNotificationSound();
         showNotification("Break Time! 🎉", "Time to take a break and relax.");
       } else if (!current.isBreak && prev.isBreak) {
+        // Break -> Work
+        playNotificationSound();
         showNotification("Back to Work! 💪", "Break is over. Let's focus!");
       }
     }
@@ -133,12 +146,20 @@ export default function SessionPage() {
     prevSessionRef.current = session;
   }, [session]);
 
+  function playNotificationSound() {
+    if (audioRef.current) {
+      audioRef.current.play().catch((err) => {
+        console.log("Could not play sound:", err);
+      });
+    }
+  }
+
   function showNotification(title: string, body: string) {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(title, {
         body,
-        icon: "/icon.png",
-        badge: "/icon.png",
+        icon: "/favicon.ico",
+        badge: "/favicon.ico",
       });
     }
   }
