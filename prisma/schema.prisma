@@ -22,21 +22,23 @@ model User {
 }
 
 model PomodoroSession {
-  id              String          @id @default(cuid())
-  name            String
-  inviteToken     String          @unique @default(cuid())
-  status          SessionStatus   @default(IDLE)
-  workDuration    Int             @default(1500) // seconds (25 min)
-  breakDuration   Int             @default(300)  // seconds (5 min)
-  timeLeft        Int             @default(1500)
-  isBreak         Boolean         @default(false)
-  startedAt       DateTime?
-  completedPomodoros Int          @default(0)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  ownerId         String
-  owner           User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members         SessionMember[]
+  id                    String          @id @default(cuid())
+  name                  String
+  inviteToken           String          @unique @default(cuid())
+  status                SessionStatus   @default(IDLE)
+  workDuration          Int             @default(1500) // seconds (25 min)
+  breakDuration         Int             @default(300)  // seconds (5 min)
+  longBreakDuration     Int             @default(900)  // seconds (15 min)
+  pomodorosUntilLongBreak Int           @default(4)    // number of pomodoros before long break
+  timeLeft              Int             @default(1500)
+  isBreak               Boolean         @default(false)
+  startedAt             DateTime?
+  completedPomodoros    Int             @default(0)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  ownerId               String
+  owner                 User            @relation("SessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members               SessionMember[]
 }
 
 model SessionMember {

@@ -21,6 +21,8 @@ export default function NewSessionPage() {
   const [name, setName] = useState("");
   const [workMinutes, setWorkMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
+  const [longBreakMinutes, setLongBreakMinutes] = useState(15);
+  const [pomodorosUntilLongBreak, setPomodorosUntilLongBreak] = useState(4);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -37,6 +39,8 @@ export default function NewSessionPage() {
           name,
           workDuration: workMinutes * 60,
           breakDuration: breakMinutes * 60,
+          longBreakDuration: longBreakMinutes * 60,
+          pomodorosUntilLongBreak,
         }),
       });
 
@@ -111,7 +115,7 @@ export default function NewSessionPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="break">Break duration (min)</Label>
+                  <Label htmlFor="break">Short break (min)</Label>
                   <Input
                     id="break"
                     type="number"
@@ -124,7 +128,35 @@ export default function NewSessionPage() {
                   />
                 </div>
               </div>
-              <div className="p-4 rounded-lg bg-secondary/50 text-sm text-muted-foreground">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="longBreak">Long break (min)</Label>
+                  <Input
+                    id="longBreak"
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={longBreakMinutes}
+                    onChange={(e) =>
+                      setLongBreakMinutes(parseInt(e.target.value) || 15)
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pomodorosUntilLongBreak">Pomodoros until long break</Label>
+                  <Input
+                    id="pomodorosUntilLongBreak"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={pomodorosUntilLongBreak}
+                    onChange={(e) =>
+                      setPomodorosUntilLongBreak(parseInt(e.target.value) || 4)
+                    }
+                  />
+                </div>
+              </div>
+              <div className="p-4 rounded-lg bg-secondary/50 text-sm text-muted-foreground space-y-1">
                 <p>
                   <strong className="text-foreground">
                     {workMinutes} min focus
@@ -132,6 +164,16 @@ export default function NewSessionPage() {
                   followed by{" "}
                   <strong className="text-foreground">
                     {breakMinutes} min break
+                  </strong>
+                </p>
+                <p>
+                  After every{" "}
+                  <strong className="text-foreground">
+                    {pomodorosUntilLongBreak} pomodoros
+                  </strong>
+                  , take a{" "}
+                  <strong className="text-foreground">
+                    {longBreakMinutes} min long break
                   </strong>
                 </p>
               </div>

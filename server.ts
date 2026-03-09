@@ -45,27 +45,57 @@ async function tickSession(sessionId: string, io: Server) {
   if (newTimeLeft <= 0) {
     // Switch phase
     const switchToBreak = !session.isBreak;
-    const updated = await prisma.pomodoroSession.update({
-      where: { id: sessionId },
-      data: {
-        isBreak: switchToBreak,
-        status: switchToBreak ? SessionStatus.BREAK : SessionStatus.RUNNING,
-        timeLeft: switchToBreak ? session.breakDuration : session.workDuration,
-        startedAt: new Date(),
-        completedPomodoros: switchToBreak ? session.completedPomodoros + 1 : session.completedPomodoros,
-      },
-      include: {
-        owner: { select: { id: true, name: true, email: true } },
-        members: {
-          include: { user: { select: { id: true, name: true, email: true } } },
+    
+    if (switchToBreak) {
+      // Determine if it's time for a long break
+      const newCompletedCount = session.completedPomodoros + 1;
+      const isLongBreak = newCompletedCount % session.pomodorosUntilLongBreak === 0;
+      const breakDuration = isLongBreak ? session.longBreakDuration : session.breakDuration;
+      
+      const updated = await prisma.pomodoroSession.update({
+        where: { id: sessionId },
+        data: {
+          isBreak: true,
+          status: SessionStatus.BREAK,
+          timeLeft: breakDuration,
+          startedAt: new Date(),
+          completedPomodoros: newCompletedCount,
         },
-      },
-    });
-    const updatedWithOnline = {
-      ...updated,
-      onlineUsers: getOnlineUsersForSession(sessionId),
-    };
-    io.to(`session:${sessionId}`).emit("timer-update", updatedWithOnline);
+        include: {
+          owner: { select: { id: true, name: true, email: true } },
+          members: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+        },
+      });
+      const updatedWithOnline = {
+        ...updated,
+        onlineUsers: getOnlineUsersForSession(sessionId),
+      };
+      io.to(`session:${sessionId}`).emit("timer-update", updatedWithOnline);
+    } else {
+      // Switch from break to work
+      const updated = await prisma.pomodoroSession.update({
+        where: { id: sessionId },
+        data: {
+          isBreak: false,
+          status: SessionStatus.RUNNING,
+          timeLeft: session.workDuration,
+          startedAt: new Date(),
+        },
+        include: {
+          owner: { select: { id: true, name: true, email: true } },
+          members: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+        },
+      });
+      const updatedWithOnline = {
+        ...updated,
+        onlineUsers: getOnlineUsersForSession(sessionId),
+      };
+      io.to(`session:${sessionId}`).emit("timer-update", updatedWithOnline);
+    }
   } else {
     const updated = await prisma.pomodoroSession.update({
       where: { id: sessionId },
@@ -220,6 +250,19 @@ app.prepare().then(() => {
             startedAt: null,
           };
           stopTimer(sessionId);
+          break;
+        case "cancel":
+          // Cancel current pomodoro - only works during work time
+          if (!session.isBreak && session.status !== SessionStatus.IDLE) {
+            updateData = {
+              status: SessionStatus.IDLE,
+              isBreak: false,
+              timeLeft: session.workDuration,
+              startedAt: null,
+              completedPomodoros: 0,
+            };
+            stopTimer(sessionId);
+          }
           break;
       }
 

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { name, workDuration, breakDuration } = await request.json();
+    const { name, workDuration, breakDuration, longBreakDuration, pomodorosUntilLongBreak } = await request.json();
 
     if (!name) {
       return NextResponse.json(
@@ -49,6 +49,8 @@ export async function POST(request: Request) {
         ownerId: session.user.id,
         workDuration: workDuration ?? 1500,
         breakDuration: breakDuration ?? 300,
+        longBreakDuration: longBreakDuration ?? 900,
+        pomodorosUntilLongBreak: pomodorosUntilLongBreak ?? 4,
         timeLeft: workDuration ?? 1500,
       },
       include: {

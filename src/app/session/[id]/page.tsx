@@ -15,6 +15,7 @@ import {
   Check,
   Users,
   ArrowLeft,
+  X,
 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -30,6 +31,8 @@ type SessionData = {
   status: "IDLE" | "RUNNING" | "PAUSED" | "BREAK";
   workDuration: number;
   breakDuration: number;
+  longBreakDuration: number;
+  pomodorosUntilLongBreak: number;
   timeLeft: number;
   isBreak: boolean;
   completedPomodoros: number;
@@ -302,9 +305,21 @@ export default function SessionPage() {
               variant="outline"
               onClick={() => sendAction("reset")}
               disabled={actionLoading || session.status === "IDLE"}
+              title="Reset timer"
             >
               <RotateCcw className="h-5 w-5" />
             </Button>
+            {!session.isBreak && session.status !== "IDLE" && (
+              <Button
+                size="lg"
+                variant="destructive"
+                onClick={() => sendAction("cancel")}
+                disabled={actionLoading}
+                title="Cancel current pomodoro cycle"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            )}
             <Button
               size="lg"
               className="px-10"
@@ -326,24 +341,53 @@ export default function SessionPage() {
           </div>
 
           {/* Session info */}
-          <div className="grid grid-cols-2 gap-4 w-full max-w-sm text-center">
+          <div className="w-full max-w-sm space-y-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="text-2xl font-bold">
+                    {Math.floor(session.workDuration / 60)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    min focus
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="text-2xl font-bold">
+                    {Math.floor(session.breakDuration / 60)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    short break
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-4">
+                  <div className="text-2xl font-bold">
+                    {Math.floor(session.longBreakDuration / 60)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    long break
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Pomodoro progress */}
             <Card>
               <CardContent className="pt-4 pb-4">
-                <div className="text-2xl font-bold">
-                  {Math.floor(session.workDuration / 60)}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  min focus
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 pb-4">
-                <div className="text-2xl font-bold">
-                  {Math.floor(session.breakDuration / 60)}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  min break
+                <div className="text-center space-y-2">
+                  <div className="text-2xl font-bold">
+                    {session.completedPomodoros}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    completed pomodoros
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {session.pomodorosUntilLongBreak - (session.completedPomodoros % session.pomodorosUntilLongBreak)} more until long break
+                  </div>
                 </div>
               </CardContent>
             </Card>
