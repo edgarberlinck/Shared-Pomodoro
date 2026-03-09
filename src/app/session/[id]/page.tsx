@@ -17,7 +17,6 @@ import {
   ArrowLeft,
   X,
 } from "lucide-react";
-import { io, Socket } from "socket.io-client";
 
 type Member = {
   id: string;
@@ -39,7 +38,6 @@ type SessionData = {
   ownerId: string;
   owner: { id: string; name: string | null; email: string };
   members: Member[];
-  onlineUsers?: string[];
 };
 
 function formatTime(seconds: number): string {
@@ -58,19 +56,11 @@ export default function SessionPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const socketRef = useRef<Socket | null>(null);
   const prevSessionRef = useRef<SessionData | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
-      // Get current user from auth API first
-      const authRes = await fetch("/api/auth/session");
-      if (authRes.ok) {
-        const authData = await authRes.json();
-        setUserId(authData?.user?.id || null);
-      }
-
       const res = await fetch(`/api/sessions/${sessionId}`);
       if (res.status === 401) {
         router.push("/auth/signin");
@@ -128,53 +118,39 @@ export default function SessionPage() {
     }
   }
 
-  // Initialize session and WebSocket connection
+  // Initialize session and polling
   useEffect(() => {
     fetchSession();
-  }, [fetchSession]);
 
-  useEffect(() => {
-    if (!userId) return;
-
-    const socket = io({
-      path: "/socket.io",
-    });
-
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      console.log("WebSocket connected");
-      socket.emit("join-session", { sessionId, userId });
-    });
-
-    socket.on("timer-update", (updatedSession: SessionData) => {
-      console.log("Timer update received:", updatedSession);
-      setSession(updatedSession);
-    });
-
-    socket.on("online-users-update", ({ onlineUsers }: { onlineUsers: string[] }) => {
-      console.log("Online users update:", onlineUsers);
-      setSession((prev) => prev ? { ...prev, onlineUsers } : null);
-    });
-
-    socket.on("disconnect", () => {
-      console.log("WebSocket disconnected");
-    });
+    // Poll for updates every second when timer is running
+    pollingIntervalRef.current = setInterval(() => {
+      fetchSession();
+    }, 1000);
 
     return () => {
-      socket.emit("leave-session", sessionId);
-      socket.disconnect();
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
     };
-  }, [sessionId, userId]);
+  }, [fetchSession]);
 
   async function sendAction(action: string) {
-    if (!socketRef.current) return;
-    
     setActionLoading(true);
-    socketRef.current.emit("timer-action", { sessionId, action });
-    
-    // Wait a bit for the response
-    setTimeout(() => setActionLoading(false), 500);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/timer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSession(data);
+      }
+    } catch (error) {
+      console.error("Action failed:", error);
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   function copyInviteLink() {
@@ -404,19 +380,12 @@ export default function SessionPage() {
             <CardContent>
               <ul className="space-y-2">
                 {allMembers.map(({ user, isOwner }) => {
-                  const isOnline = session.onlineUsers?.includes(user.id);
                   return (
                     <li
                       key={user.id}
                       className="flex items-center justify-between text-sm"
                     >
                       <div className="flex items-center gap-2">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            isOnline ? "bg-green-500" : "bg-gray-400"
-                          }`}
-                          title={isOnline ? "Online" : "Offline"}
-                        />
                         <span>{user.name ?? user.email}</span>
                       </div>
                       {isOwner && (

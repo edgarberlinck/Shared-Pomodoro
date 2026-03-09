@@ -40,6 +40,7 @@ export async function POST(
     timeLeft: number;
     isBreak: boolean;
     startedAt: Date | null;
+    completedPomodoros: number;
   }> = {};
 
   switch (action) {
@@ -67,6 +68,18 @@ export async function POST(
         startedAt: null,
       };
       break;
+    case "cancel":
+      // Cancel current pomodoro - only works during work time
+      if (!pomodoroSession.isBreak && pomodoroSession.status !== "IDLE") {
+        updateData = {
+          status: SessionStatus.IDLE,
+          isBreak: false,
+          timeLeft: pomodoroSession.workDuration,
+          startedAt: null,
+          completedPomodoros: 0,
+        };
+      }
+      break;
     case "tick": {
       // Server-side tick: decrement timeLeft
       if (
@@ -79,14 +92,29 @@ export async function POST(
       if (newTimeLeft <= 0) {
         // Switch phase
         const switchToBreak = !pomodoroSession.isBreak;
-        updateData = {
-          isBreak: switchToBreak,
-          status: switchToBreak ? SessionStatus.BREAK : SessionStatus.RUNNING,
-          timeLeft: switchToBreak
-            ? pomodoroSession.breakDuration
-            : pomodoroSession.workDuration,
-          startedAt: new Date(),
-        };
+        
+        if (switchToBreak) {
+          // Determine if it's time for a long break
+          const newCompletedCount = pomodoroSession.completedPomodoros + 1;
+          const isLongBreak = newCompletedCount % pomodoroSession.pomodorosUntilLongBreak === 0;
+          const breakDuration = isLongBreak ? pomodoroSession.longBreakDuration : pomodoroSession.breakDuration;
+          
+          updateData = {
+            isBreak: true,
+            status: SessionStatus.BREAK,
+            timeLeft: breakDuration,
+            startedAt: new Date(),
+            completedPomodoros: newCompletedCount,
+          };
+        } else {
+          // Switch from break to work
+          updateData = {
+            isBreak: false,
+            status: SessionStatus.RUNNING,
+            timeLeft: pomodoroSession.workDuration,
+            startedAt: new Date(),
+          };
+        }
       } else {
         updateData = { timeLeft: newTimeLeft };
       }
