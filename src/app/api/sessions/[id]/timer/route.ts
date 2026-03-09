@@ -54,10 +54,27 @@ export async function POST(
       break;
     case "pause":
       if (pomodoroSession.status === "RUNNING" || pomodoroSession.status === "BREAK") {
-        updateData = {
-          status: SessionStatus.PAUSED,
-          startedAt: null,
-        };
+        // Calculate current timeLeft before pausing
+        if (pomodoroSession.startedAt) {
+          const elapsedSeconds = Math.floor(
+            (Date.now() - pomodoroSession.startedAt.getTime()) / 1000
+          );
+          const duration = pomodoroSession.isBreak
+            ? pomodoroSession.breakDuration
+            : pomodoroSession.workDuration;
+          const calculatedTimeLeft = Math.max(0, duration - elapsedSeconds);
+          
+          updateData = {
+            status: SessionStatus.PAUSED,
+            startedAt: null,
+            timeLeft: calculatedTimeLeft,
+          };
+        } else {
+          updateData = {
+            status: SessionStatus.PAUSED,
+            startedAt: null,
+          };
+        }
       }
       break;
     case "reset":
@@ -103,7 +120,7 @@ export async function POST(
       const calculatedTimeLeft = Math.max(0, duration - elapsedSeconds);
       
       if (calculatedTimeLeft <= 0) {
-        // Switch phase
+        // Switch phase - SAVE TO DB
         const switchToBreak = !pomodoroSession.isBreak;
         
         if (switchToBreak) {
@@ -129,13 +146,25 @@ export async function POST(
           };
         }
       } else {
-        // Just update timeLeft for sync
-        updateData = { timeLeft: calculatedTimeLeft };
+        // No phase transition - don't save to DB, just return calculated state
+        return NextResponse.json({
+          ...pomodoroSession,
+          timeLeft: calculatedTimeLeft,
+        });
       }
       break;
     }
     default:
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  }
+
+  // Only save to DB when there's actual data to update
+  // This happens on:
+  // 1. Status changes (start, pause, reset, cancel)
+  // 2. Phase transitions (work -> break, break -> work)
+  // 3. Pomodoro completion
+  if (Object.keys(updateData).length === 0) {
+    return NextResponse.json(pomodoroSession);
   }
 
   const updated = await prisma.pomodoroSession.update({
