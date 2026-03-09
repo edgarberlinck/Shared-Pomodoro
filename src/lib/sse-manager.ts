@@ -30,10 +30,13 @@ class SSEManager {
 
   broadcast(sessionId: string, data: any) {
     const connections = this.connections.get(sessionId);
+    console.log(`SSEManager: Broadcasting to session ${sessionId}, ${connections?.size || 0} connections`);
+    
     if (!connections || connections.size === 0) return;
 
     connections.forEach(({ controller, encoder }) => {
       try {
+        console.log(`Sending data to connection:`, data);
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
         );

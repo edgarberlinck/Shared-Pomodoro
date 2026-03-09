@@ -89,18 +89,14 @@ export default function SessionPage() {
       const newTimeLeft = prev.timeLeft - 1;
       
       if (newTimeLeft <= 0) {
-        // Phase transition - sync with server
+        // Phase transition - server will handle and broadcast via SSE
         fetch(`/api/sessions/${sessionId}/timer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "tick" }),
-        })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data) setSession(data);
-          })
-          .catch(console.error);
+        }).catch(console.error);
         
+        // Keep current state, server will update via SSE
         return prev;
       }
       
@@ -155,11 +151,17 @@ export default function SessionPage() {
     const eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
     eventSourceRef.current = eventSource;
 
+    eventSource.onopen = () => {
+      console.log("SSE connected");
+    };
+
     eventSource.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log("SSE message received:", message);
         
         if (message.type === "session-update" && message.data) {
+          console.log("Updating session from SSE:", message.data);
           setSession(message.data);
         }
       } catch (error) {
@@ -173,6 +175,7 @@ export default function SessionPage() {
     };
 
     return () => {
+      console.log("Closing SSE connection");
       eventSource.close();
     };
   }, [fetchSession, sessionId]);

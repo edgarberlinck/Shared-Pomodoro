@@ -180,6 +180,8 @@ export async function POST(
   });
 
   // Broadcast update to all SSE clients
+  const connectionCount = sseManager.getConnectionCount(id);
+  console.log(`Broadcasting to ${connectionCount} connections for session ${id}`);
   sseManager.broadcast(id, { type: "session-update", data: updated });
 
   return NextResponse.json(updated);
