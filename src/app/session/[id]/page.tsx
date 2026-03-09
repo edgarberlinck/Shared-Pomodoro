@@ -89,7 +89,17 @@ export default function SessionPage() {
     }
   }, [sessionId, router]);
 
-  // Client-side timer tick
+  /**
+   * Client-Side Timer Tick Function
+   * 
+   * Decrements the timer locally every second. When it reaches 0,
+   * notifies the server to handle phase transitions.
+   * 
+   * This hybrid approach provides:
+   * - Smooth countdown without network delay
+   * - Server authority over phase changes
+   * - Minimal server load (only on phase transitions)
+   */
   const tickTimer = useCallback(() => {
     setSession((prev) => {
       if (!prev) return prev;
@@ -98,14 +108,15 @@ export default function SessionPage() {
       const newTimeLeft = prev.timeLeft - 1;
       
       if (newTimeLeft <= 0) {
-        // Phase transition - server will handle and broadcast via SSE
+        // Phase transition detected - let server handle it
+        // Server will calculate if it's time for break/work/long break
         fetch(`/api/sessions/${sessionId}/timer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "tick" }),
         }).catch(console.error);
         
-        // Keep current state, server will update via SSE
+        // Keep current state, polling will update with server's decision
         return prev;
       }
       
@@ -164,18 +175,41 @@ export default function SessionPage() {
     }
   }
 
-  // Initialize session and smart polling
+  /**
+   * Smart Polling Strategy for Multi-User Sync
+   * 
+   * WHY POLLING INSTEAD OF WEBSOCKETS/SSE?
+   * Vercel Free tier has a 25-second timeout for long-lived connections,
+   * making WebSockets and Server-Sent Events unreliable. Polling is the
+   * only reliable real-time sync strategy that works on Vercel Free.
+   * 
+   * HOW IT WORKS:
+   * 1. Poll server every 5 seconds to fetch latest session state
+   * 2. Client-side timer runs independently for smooth countdown
+   * 3. Server calculates actual time based on `startedAt` timestamp
+   * 4. When actions occur (start/pause), immediate fetch for instant feedback
+   * 
+   * PERFORMANCE:
+   * - 0.2 requests/second per user (1 request every 5 seconds)
+   * - Only reads from DB during polling (no writes)
+   * - Acceptable latency for timer app (5s sync delay)
+   * 
+   * ALTERNATIVES (if not on Vercel Free):
+   * - WebSockets: Real-time bidirectional communication
+   * - Server-Sent Events (SSE): Server push updates to clients
+   * - Pusher/Ably: Third-party real-time services
+   */
   useEffect(() => {
     fetchSession();
 
-    // Smart polling: more frequent when timer is running
+    // Start polling interval
     const startPolling = () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
 
       // Poll every 5 seconds to sync with server
-      // This catches updates from other users
+      // This catches updates from other users in the same session
       pollingIntervalRef.current = setInterval(() => {
         fetchSession();
       }, 5000);
@@ -190,7 +224,27 @@ export default function SessionPage() {
     };
   }, [fetchSession]);
 
-  // Client-side timer
+  /**
+   * Client-Side Timer for Smooth Countdown
+   * 
+   * WHY CLIENT-SIDE TIMER?
+   * Running the countdown on the client provides 60fps smooth updates
+   * without hammering the server. The server remains the source of truth
+   * via the `startedAt` timestamp.
+   * 
+   * HOW IT WORKS:
+   * 1. Timer decrements `timeLeft` every second locally
+   * 2. When reaching 0, sends "tick" action to server
+   * 3. Server handles phase transitions (work -> break)
+   * 4. Polling syncs any drift every 5 seconds
+   * 
+   * PHASE TRANSITIONS:
+   * - Client detects timeLeft === 0
+   * - Sends "tick" action to server
+   * - Server calculates if phase should change
+   * - Server updates DB and returns new state
+   * - Client receives update and continues countdown
+   */
   useEffect(() => {
     if (!session) return;
 
