@@ -58,7 +58,7 @@ export default function SessionPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const prevSessionRef = useRef<SessionData | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -147,41 +147,56 @@ export default function SessionPage() {
     }
   }
 
-  // Initialize session and polling
+  // Initialize session and SSE connection
   useEffect(() => {
     fetchSession();
-  }, [fetchSession]);
+
+    // Setup Server-Sent Events connection
+    const eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.type === "session-update" && message.data) {
+          setSession(message.data);
+        }
+      } catch (error) {
+        console.error("Error parsing SSE message:", error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("SSE error:", error);
+      // Reconnect will happen automatically
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [fetchSession, sessionId]);
 
   // Client-side timer
   useEffect(() => {
     if (!session) return;
 
-    // Clear existing timers
+    // Clear existing timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
-    }
-    if (syncIntervalRef.current) {
-      clearInterval(syncIntervalRef.current);
-      syncIntervalRef.current = null;
     }
 
     // Start timer if running
     if (session.status === "RUNNING" || session.status === "BREAK") {
       // Tick every second on client
       timerIntervalRef.current = setInterval(tickTimer, 1000);
-      
-      // Sync with server every 10 seconds to prevent drift
-      syncIntervalRef.current = setInterval(() => {
-        fetchSession();
-      }, 10000);
     }
 
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
-  }, [session?.status, session?.id, tickTimer, fetchSession]);
+  }, [session?.status, session?.id, tickTimer]);
 
   async function sendAction(action: string) {
     setActionLoading(true);
