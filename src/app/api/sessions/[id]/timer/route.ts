@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SessionStatus } from "@/generated/prisma/enums";
-import { sseManager } from "@/lib/sse-manager";
 
 export async function POST(
   request: Request,
@@ -178,11 +177,6 @@ export async function POST(
       },
     },
   });
-
-  // Broadcast update to all SSE clients
-  const connectionCount = sseManager.getConnectionCount(id);
-  console.log(`Broadcasting to ${connectionCount} connections for session ${id}`);
-  sseManager.broadcast(id, { type: "session-update", data: updated });
 
   return NextResponse.json(updated);
 }

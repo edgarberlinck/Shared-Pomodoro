@@ -58,7 +58,7 @@ export default function SessionPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const prevSessionRef = useRef<SessionData | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -143,42 +143,31 @@ export default function SessionPage() {
     }
   }
 
-  // Initialize session and SSE connection
+  // Initialize session and smart polling
   useEffect(() => {
     fetchSession();
 
-    // Setup Server-Sent Events connection
-    const eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      console.log("SSE connected");
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log("SSE message received:", message);
-        
-        if (message.type === "session-update" && message.data) {
-          console.log("Updating session from SSE:", message.data);
-          setSession(message.data);
-        }
-      } catch (error) {
-        console.error("Error parsing SSE message:", error);
+    // Smart polling: more frequent when timer is running
+    const startPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
+
+      // Poll every 5 seconds to sync with server
+      // This catches updates from other users
+      pollingIntervalRef.current = setInterval(() => {
+        fetchSession();
+      }, 5000);
     };
 
-    eventSource.onerror = (error) => {
-      console.error("SSE error:", error);
-      // Reconnect will happen automatically
-    };
+    startPolling();
 
     return () => {
-      console.log("Closing SSE connection");
-      eventSource.close();
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
     };
-  }, [fetchSession, sessionId]);
+  }, [fetchSession]);
 
   // Client-side timer
   useEffect(() => {
@@ -212,6 +201,8 @@ export default function SessionPage() {
       if (res.ok) {
         const data = await res.json();
         setSession(data);
+        // Immediately poll to sync with other clients
+        setTimeout(() => fetchSession(), 100);
       }
     } catch (error) {
       console.error("Action failed:", error);
