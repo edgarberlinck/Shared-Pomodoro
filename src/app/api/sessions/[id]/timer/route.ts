@@ -81,15 +81,28 @@ export async function POST(
       }
       break;
     case "tick": {
-      // Server-side tick: decrement timeLeft
+      // Server-side tick: check if phase should transition
       if (
         pomodoroSession.status !== "RUNNING" &&
         pomodoroSession.status !== "BREAK"
       ) {
         return NextResponse.json(pomodoroSession);
       }
-      const newTimeLeft = pomodoroSession.timeLeft - 1;
-      if (newTimeLeft <= 0) {
+      
+      // Calculate actual time left based on startedAt
+      if (!pomodoroSession.startedAt) {
+        return NextResponse.json(pomodoroSession);
+      }
+      
+      const elapsedSeconds = Math.floor(
+        (Date.now() - pomodoroSession.startedAt.getTime()) / 1000
+      );
+      const duration = pomodoroSession.isBreak
+        ? pomodoroSession.breakDuration
+        : pomodoroSession.workDuration;
+      const calculatedTimeLeft = Math.max(0, duration - elapsedSeconds);
+      
+      if (calculatedTimeLeft <= 0) {
         // Switch phase
         const switchToBreak = !pomodoroSession.isBreak;
         
@@ -116,7 +129,8 @@ export async function POST(
           };
         }
       } else {
-        updateData = { timeLeft: newTimeLeft };
+        // Just update timeLeft for sync
+        updateData = { timeLeft: calculatedTimeLeft };
       }
       break;
     }

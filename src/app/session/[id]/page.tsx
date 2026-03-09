@@ -57,7 +57,8 @@ export default function SessionPage() {
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const prevSessionRef = useRef<SessionData | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -78,6 +79,34 @@ export default function SessionPage() {
       setLoading(false);
     }
   }, [sessionId, router]);
+
+  // Client-side timer tick
+  const tickTimer = useCallback(() => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      if (prev.status !== "RUNNING" && prev.status !== "BREAK") return prev;
+      
+      const newTimeLeft = prev.timeLeft - 1;
+      
+      if (newTimeLeft <= 0) {
+        // Phase transition - sync with server
+        fetch(`/api/sessions/${sessionId}/timer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "tick" }),
+        })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data) setSession(data);
+          })
+          .catch(console.error);
+        
+        return prev;
+      }
+      
+      return { ...prev, timeLeft: newTimeLeft };
+    });
+  }, [sessionId]);
 
   // Request notification permission
   useEffect(() => {
@@ -121,38 +150,38 @@ export default function SessionPage() {
   // Initialize session and polling
   useEffect(() => {
     fetchSession();
+  }, [fetchSession]);
 
-    // Send tick every second when timer is running
-    pollingIntervalRef.current = setInterval(async () => {
-      if (!session) return;
+  // Client-side timer
+  useEffect(() => {
+    if (!session) return;
+
+    // Clear existing timers
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+      syncIntervalRef.current = null;
+    }
+
+    // Start timer if running
+    if (session.status === "RUNNING" || session.status === "BREAK") {
+      // Tick every second on client
+      timerIntervalRef.current = setInterval(tickTimer, 1000);
       
-      // If timer is running or in break, send a tick to the server
-      if (session.status === "RUNNING" || session.status === "BREAK") {
-        try {
-          const res = await fetch(`/api/sessions/${sessionId}/timer`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "tick" }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setSession(data);
-          }
-        } catch (error) {
-          console.error("Tick failed:", error);
-        }
-      } else {
-        // Just fetch current state when not running
+      // Sync with server every 10 seconds to prevent drift
+      syncIntervalRef.current = setInterval(() => {
         fetchSession();
-      }
-    }, 1000);
+      }, 10000);
+    }
 
     return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
-  }, [fetchSession, session, sessionId]);
+  }, [session?.status, session?.id, tickTimer, fetchSession]);
 
   async function sendAction(action: string) {
     setActionLoading(true);

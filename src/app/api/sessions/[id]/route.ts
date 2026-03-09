@@ -26,7 +26,23 @@ export async function GET(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  return NextResponse.json(pomodoroSession);
+  // Calculate actual timeLeft based on startedAt for running timers
+  let calculatedSession = { ...pomodoroSession };
+  if (
+    pomodoroSession.startedAt &&
+    (pomodoroSession.status === "RUNNING" || pomodoroSession.status === "BREAK")
+  ) {
+    const elapsedSeconds = Math.floor(
+      (Date.now() - pomodoroSession.startedAt.getTime()) / 1000
+    );
+    const duration = pomodoroSession.isBreak
+      ? pomodoroSession.breakDuration
+      : pomodoroSession.workDuration;
+    const calculatedTimeLeft = Math.max(0, duration - elapsedSeconds);
+    calculatedSession.timeLeft = calculatedTimeLeft;
+  }
+
+  return NextResponse.json(calculatedSession);
 }
 
 export async function DELETE(
