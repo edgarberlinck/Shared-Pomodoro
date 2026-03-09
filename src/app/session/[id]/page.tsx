@@ -122,9 +122,29 @@ export default function SessionPage() {
   useEffect(() => {
     fetchSession();
 
-    // Poll for updates every second when timer is running
-    pollingIntervalRef.current = setInterval(() => {
-      fetchSession();
+    // Send tick every second when timer is running
+    pollingIntervalRef.current = setInterval(async () => {
+      if (!session) return;
+      
+      // If timer is running or in break, send a tick to the server
+      if (session.status === "RUNNING" || session.status === "BREAK") {
+        try {
+          const res = await fetch(`/api/sessions/${sessionId}/timer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "tick" }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSession(data);
+          }
+        } catch (error) {
+          console.error("Tick failed:", error);
+        }
+      } else {
+        // Just fetch current state when not running
+        fetchSession();
+      }
     }, 1000);
 
     return () => {
@@ -132,7 +152,7 @@ export default function SessionPage() {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [fetchSession]);
+  }, [fetchSession, session, sessionId]);
 
   async function sendAction(action: string) {
     setActionLoading(true);
