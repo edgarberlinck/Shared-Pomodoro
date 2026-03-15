@@ -306,6 +306,38 @@ Found a bug or have an idea? [Open an issue](https://github.com/edgarberlinck/Sh
 
 This project is open source and available under the [MIT License](LICENSE).
 
+## 🖥️ Desktop App (macOS)
+
+Uma versão desktop para macOS está disponível! Ela roda na menu bar e se conecta ao servidor em produção.
+
+**Features:**
+- 🎯 Menu bar app - Sempre acessível
+- 🌐 Conecta em https://shared-focus.vercel.app
+- 🔄 Sincronização via polling HTTP (5s)
+- 🔔 Notificações nativas do macOS
+- ⏱️ Timer em tempo real
+
+**Build para distribuição:**
+```bash
+npm install
+npm run electron:build:mac
+```
+
+Isso gera um DMG em `release/` que pode ser distribuído para usuários finais. Eles **não precisam** rodar o servidor localmente!
+
+**Desenvolvimento local:**
+```bash
+# Terminal 1: Servidor local
+npm run dev
+
+# Terminal 2: App desktop
+npm run electron:dev
+```
+
+Veja mais detalhes em:
+- [desktop/README.md](desktop/README.md) - Documentação completa
+- [desktop/BUILD.md](desktop/BUILD.md) - Guia de build
+
 ## 👤 Author
 
 **Edgar Berlinck**

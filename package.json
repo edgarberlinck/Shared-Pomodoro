@@ -7,7 +7,12 @@
     "build": "next build",
     "vercel-build": "prisma migrate deploy && prisma generate && next build",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:compile": "tsc -p tsconfig.desktop.json && cp desktop/index.html dist/desktop/",
+    "electron:dev": "NODE_ENV=development npm run electron:compile && electron dist/desktop/main.js",
+    "electron:build": "NODE_ENV=production npm run electron:compile && electron-builder",
+    "electron:build:mac": "NODE_ENV=production npm run electron:compile && electron-builder --mac",
+    "electron:build:mac:dev": "NODE_ENV=development npm run electron:compile && electron-builder --mac"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
@@ -24,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.3.1",
+    "jose": "^6.2.1",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
@@ -39,15 +45,49 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",
+    "@types/electron": "^1.4.38",
     "@types/node": "^20.19.37",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^34.5.8",
+    "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4.2.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.4"
+  },
+  "main": "dist/desktop/main.js",
+  "build": {
+    "appId": "com.sharedpomodoro.app",
+    "productName": "Shared Pomodoro",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/index.html",
+      "desktop/assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop/index.html",
+        "to": "index.html"
+      }
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "desktop/assets"
+    }
   }
 }
